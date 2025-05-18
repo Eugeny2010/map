@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
+  <script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=Y6jOe2AMgpIwJsp872G6aCN1Mq8Fu1Ms8Kw1dD6Km04lbC-u5qCVCKsxjXuo513DzuP9JbowWTganEPNeO7fCg" charset="UTF-8"></script><style>
     html, body { margin: 0; padding: 0; height: 100%; font-family: Arial, sans-serif; }
     #map { height: 100vh; width: 100vw; touch-action: none; }
     #error {
@@ -111,7 +111,7 @@
       let hasContent = false;
       for (const key in feature.properties) {
         if (!['stroke', 'stroke-width', 'stroke-opacity', 'fill', 'fill-opacity'].includes(key)) {
-          content += `<b>${key}</b>: ${feature.properties[key] || '—'}<br>`;
+          content += `<b>${key}</b> ${feature.properties[key] || ''}<br>`;
           hasContent = true;
         }
       }
@@ -123,9 +123,12 @@
     function processGeoJSON(data) {
       const roaFeatures = [];
       const otherFeatures = [];
+      const pointFeatures = []; // Добавлено: отдельный массив для точечных объектов
 
       data.features.forEach(feature => {
-        if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
+        if (feature.geometry.type === 'Point') {
+          pointFeatures.push(feature); // Добавлено: сохраняем точечные объекты отдельно
+        } else if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
           if (feature.properties.fill === '#555555') {
             roaFeatures.push(feature);
           } else {
@@ -146,7 +149,7 @@
         }
       }
 
-      const processedFeatures = [...roaFeatures];
+      const processedFeatures = [...roaFeatures, ...pointFeatures]; // Добавлено: включаем точечные объекты
 
       if (roaUnion) {
         otherFeatures.forEach(feature => {
@@ -181,6 +184,10 @@
       .then(data => {
         if (!data.features) throw new Error("GeoJSON has no features");
         const processedData = processGeoJSON(data);
+        
+        // Создаем отдельный слой для маркеров
+        const markersLayer = L.layerGroup().addTo(map);
+        
         L.geoJSON(processedData, {
           pointToLayer: (feature, latlng) => {
             const marker = L.marker(latlng, {
@@ -191,6 +198,7 @@
               autoPan: true,
               autoPanPaddingTopLeft: [15, 15]
             });
+            markersLayer.addLayer(marker); // Добавляем маркер в отдельный слой
             return marker;
           },
           style: (feature) => {
