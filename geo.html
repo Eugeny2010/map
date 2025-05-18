@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+    }
+    #map {
+      height: 100vh;
+      width: 100vw;
+      touch-action: none; /* Улучшение работы тач-контролей */
+    }
+    #error {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 10px;
+      z-index: 1000;
+      color: red;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      font-size: 14px;
+    }
+    .custom-marker {
+      background-color: white;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      border: 2px solid black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .custom-marker-inner {
+      width: 10px;
+      height: 10px;
+      background-color: black;
+      border-radius: 50%;
+    }
+    .leaflet-popup-content {
+      padding: 10px;
+      min-width: 150px;
+      font-family: Arial, sans-serif;
+      color: black;
+      font-size: 14px;
+    }
+
+    @media (max-width: 600px) {
+      .leaflet-popup-content {
+        font-size: 16px;
+        min-width: 200px;
+      }
+
+      .custom-marker {
+        width: 22px;
+        height: 22px;
+      }
+
+      .custom-marker-inner {
+        width: 12px;
+        height: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="error"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const southWest = L.latLng(41.0, 27.0);
+    const northEast = L.latLng(70.0, 60.0);
+    const bounds = L.latLngBounds(southWest, northEast);
+
+// Проверка: мобильное ли устройство
+const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+// Задание стартового зума
+const initialZoom = isMobile ? 5 : 7;
+
+// Инициализация карты (временно указываем minZoom/maxZoom, потом поменяем)
+const map = L.map('map', {
+  maxBounds: bounds,
+  maxBoundsViscosity: 1.0,
+  minZoom: 5, // общий минимум
+  maxZoom: 12,
+  preferCanvas: true
+}).setView([55.0, 40.0], initialZoom);
+
+// Установка ограничений зума для мобильных
+if (isMobile) {
+  map.setMinZoom(5);
+  map.setMaxZoom(11);
+} else {
+  map.setMinZoom(7);
+  map.setMaxZoom(12);
+}
+
+
+    L.tileLayer('https://tile.openstreetmap.bzh/ca/{z}/{x}/{y}.png', {
+      attribution: 'Не имеет связи с реальностью. Все события относятся к вселенной игры https://vk.com/vgovernments',
+      subdomains: 'abc',
+      detectRetina: true,
+      crossOrigin: true,
+      updateWhenIdle: false,
+      reuseTiles: true
+    }).addTo(map);
+
+    const outerBounds = [[-90, -180], [-90, 180], [90, 180], [90, -180]];
+    L.polygon([
+      outerBounds,
+      [
+        [southWest.lat, southWest.lng],
+        [northEast.lat, southWest.lng],
+        [northEast.lat, northEast.lng],
+        [southWest.lat, northEast.lng]
+      ]
+    ], {
+      fillColor: 'black',
+      fillOpacity: 0.5,
+      stroke: false,
+      className: 'mask',
+      fillRule: 'evenodd'
+    }).addTo(map);
+
+    const whiteMachineIcon = L.divIcon({
+      className: 'custom-marker',
+      html: '<div class="custom-marker-inner"></div>',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+
+    function createPopupContent(feature) {
+      if (!feature.properties) return "Нет данных";
+      
+      let content = "<div style='max-height:200px;overflow-y:auto;'>";
+      const isROA = feature.properties['fill'] === '#555555';
+      
+      if (isROA) {
+        content += "<b>Контролируется РОА</b><br><hr>";
+      }
+      
+      let hasContent = false;
+      for (const key in feature.properties) {
+        if (!['stroke', 'stroke-width', 'stroke-opacity', 'fill', 'fill-opacity'].includes(key)) {
+          content += `<b>${key}</b> ${feature.properties[key] || '—'}<br>`;
+          hasContent = true;
+        }
+      }
+      
+      if (!hasContent && !isROA) {
+        return "Нет данных для отображения";
+      }
+      
+      content += "</div>";
+      return content;
+    }
+
+    fetch('map (9).geojson')
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        return response.json().catch(() => {
+          throw new Error("Invalid JSON format");
+        });
+      })
+      .then(data => {
+        if (!data.features) throw new Error("GeoJSON has no features");
+        
+        L.geoJSON(data, {
+          pointToLayer: (feature, latlng) => {
+            const marker = L.marker(latlng, {
+              icon: whiteMachineIcon,
+              bubblingMouseEvents: false
+            });
+            marker.bindPopup(createPopupContent(feature), {
+              autoPan: true,
+              autoPanPaddingTopLeft: [15, 15]
+            });
+            return marker;
+          },
+          style: (feature) => {
+            const props = feature.properties || {};
+            const isROA = props['fill'] === '#555555';
+            return {
+              stroke: true,
+              color: '#000',
+              weight: parseInt(props['stroke-width']) || 2,
+              opacity: parseFloat(props['stroke-opacity']) || 1,
+              fill: true,
+              fillColor: isROA ? '#555555' : (props['fill'] || '#ff9999'),
+              fillOpacity: parseFloat(props['fill-opacity']) || 0.5
+            };
+          },
+          onEachFeature: (feature, layer) => {
+            if (feature.geometry.type !== 'Point') {
+              layer.bindPopup(createPopupContent(feature));
+            }
+          }
+        }).addTo(map);
+        
+        map.setMaxBounds(bounds);
+      })
+      .catch(error => {
+        console.error("Loading error:", error);
+        document.getElementById('error').innerHTML = `
+          <b>Ошибка загрузки данных</b><br>
+          ${error.message}<br><br>
+          Проверьте:<br>
+          1. Наличие файла<br>
+          2. Формат GeoJSON<br>
+          3. Кодировку UTF-8
+        `;
+      });
+  </script>
+</body>
+</html>
