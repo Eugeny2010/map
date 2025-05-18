@@ -1,25 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      font-family: Arial, sans-serif;
-    }
-    #map {
-      height: 100vh;
-      width: 100vw;
-      touch-action: none; /* Улучшение работы тач-контролей */
-    }
+    html, body { margin: 0; padding: 0; height: 100%; font-family: Arial, sans-serif; }
+    #map { height: 100vh; width: 100vw; touch-action: none; }
     #error {
       position: absolute;
-      top: 10px;
-      left: 10px;
+      top: 10px; left: 10px;
       background: white;
       padding: 10px;
       z-index: 1000;
@@ -51,58 +41,34 @@
       color: black;
       font-size: 14px;
     }
-
     @media (max-width: 600px) {
-      .leaflet-popup-content {
-        font-size: 16px;
-        min-width: 200px;
-      }
-
-      .custom-marker {
-        width: 22px;
-        height: 22px;
-      }
-
-      .custom-marker-inner {
-        width: 12px;
-        height: 12px;
-      }
+      .leaflet-popup-content { font-size: 16px; min-width: 200px; }
+      .custom-marker { width: 22px; height: 22px; }
+      .custom-marker-inner { width: 12px; height: 12px; }
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="error"></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
   <script>
     const southWest = L.latLng(41.0, 27.0);
     const northEast = L.latLng(70.0, 60.0);
     const bounds = L.latLngBounds(southWest, northEast);
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const initialZoom = isMobile ? 5 : 7;
 
-// Проверка: мобильное ли устройство
-const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-// Задание стартового зума
-const initialZoom = isMobile ? 5 : 7;
-
-// Инициализация карты (временно указываем minZoom/maxZoom, потом поменяем)
-const map = L.map('map', {
-  maxBounds: bounds,
-  maxBoundsViscosity: 1.0,
-  minZoom: 5, // общий минимум
-  maxZoom: 12,
-  preferCanvas: true
-}).setView([55.0, 40.0], initialZoom);
-
-// Установка ограничений зума для мобильных
-if (isMobile) {
-  map.setMinZoom(5);
-  map.setMaxZoom(11);
-} else {
-  map.setMinZoom(7);
-  map.setMaxZoom(12);
-}
-
+    const map = L.map('map', {
+      maxBounds: bounds,
+      maxBoundsViscosity: 1.0,
+      minZoom: isMobile ? 5 : 7,
+      maxZoom: isMobile ? 11 : 12,
+      preferCanvas: true
+    }).setView([55.0, 40.0], initialZoom);
 
     L.tileLayer('https://tile.openstreetmap.bzh/ca/{z}/{x}/{y}.png', {
       attribution: 'Не имеет связи с реальностью. Все события относятся к вселенной игры https://vk.com/vgovernments',
@@ -139,28 +105,70 @@ if (isMobile) {
 
     function createPopupContent(feature) {
       if (!feature.properties) return "Нет данных";
-      
       let content = "<div style='max-height:200px;overflow-y:auto;'>";
       const isROA = feature.properties['fill'] === '#555555';
-      
-      if (isROA) {
-        content += "<b>Контролируется РОА</b><br><hr>";
-      }
-      
+      if (isROA) content += "<b>Контролируется РОА</b><br><hr>";
       let hasContent = false;
       for (const key in feature.properties) {
         if (!['stroke', 'stroke-width', 'stroke-opacity', 'fill', 'fill-opacity'].includes(key)) {
-          content += `<b>${key}</b> ${feature.properties[key] || '—'}<br>`;
+          content += `<b>${key}</b>: ${feature.properties[key] || '—'}<br>`;
           hasContent = true;
         }
       }
-      
-      if (!hasContent && !isROA) {
-        return "Нет данных для отображения";
-      }
-      
+      if (!hasContent && !isROA) return "Нет данных для отображения";
       content += "</div>";
       return content;
+    }
+
+    function processGeoJSON(data) {
+      const roaFeatures = [];
+      const otherFeatures = [];
+
+      data.features.forEach(feature => {
+        if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
+          if (feature.properties.fill === '#555555') {
+            roaFeatures.push(feature);
+          } else {
+            otherFeatures.push(feature);
+          }
+        }
+      });
+
+      let roaUnion = null;
+      if (roaFeatures.length > 0) {
+        roaUnion = roaFeatures[0];
+        for (let i = 1; i < roaFeatures.length; i++) {
+          try {
+            roaUnion = turf.union(roaUnion, roaFeatures[i]);
+          } catch (e) {
+            console.warn('Ошибка объединения:', e);
+          }
+        }
+      }
+
+      const processedFeatures = [...roaFeatures];
+
+      if (roaUnion) {
+        otherFeatures.forEach(feature => {
+          try {
+            const diff = turf.difference(feature, roaUnion);
+            if (diff && diff.geometry && diff.geometry.coordinates.length > 0) {
+              diff.properties = feature.properties;
+              processedFeatures.push(diff);
+            }
+          } catch (e) {
+            console.warn('Ошибка разности:', e);
+            processedFeatures.push(feature);
+          }
+        });
+      } else {
+        processedFeatures.push(...otherFeatures);
+      }
+
+      return {
+        ...data,
+        features: processedFeatures
+      };
     }
 
     fetch('map (9).geojson')
@@ -172,8 +180,8 @@ if (isMobile) {
       })
       .then(data => {
         if (!data.features) throw new Error("GeoJSON has no features");
-        
-        L.geoJSON(data, {
+        const processedData = processGeoJSON(data);
+        L.geoJSON(processedData, {
           pointToLayer: (feature, latlng) => {
             const marker = L.marker(latlng, {
               icon: whiteMachineIcon,
@@ -204,19 +212,17 @@ if (isMobile) {
             }
           }
         }).addTo(map);
-        
         map.setMaxBounds(bounds);
       })
       .catch(error => {
         console.error("Loading error:", error);
-        document.getElementById('error').innerHTML = `
-          <b>Ошибка загрузки данных</b><br>
+        document.getElementById('error').innerHTML =
+          `<b>Ошибка загрузки данных</b><br>
           ${error.message}<br><br>
           Проверьте:<br>
           1. Наличие файла<br>
           2. Формат GeoJSON<br>
-          3. Кодировку UTF-8
-        `;
+          3. Кодировку UTF-8`;
       });
   </script>
 </body>
