@@ -5,74 +5,143 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; font-family: Arial, sans-serif; }
-    #map { height: 100vh; width: 100vw; }
+    @font-face {
+      font-family: 'Aldrich';
+      src: url('Aldrich-Regular.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+    
+    html, body { 
+      margin: 0; 
+      padding: 0; 
+      height: 100%; 
+      font-family: 'Aldrich', sans-serif;
+      background-color: #121212;
+    }
+    
+    #map { 
+      height: 100vh; 
+      width: 100vw;
+      background-color: #121212;
+    }
+    
     #error {
       position: absolute;
-      top: 10px; left: 10px;
-      background: white;
+      top: 10px; 
+      left: 10px;
+      background: rgba(0,0,0,0.7);
       padding: 10px;
       z-index: 1000;
-      color: red;
+      color: #e0e0e0;
       border-radius: 5px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      box-shadow: 0 0 5px rgba(0,0,0,0.5);
       font-size: 14px;
+      font-family: 'Aldrich', sans-serif;
+      border: 1px solid #333;
     }
+    
     .custom-marker {
-      background-color: white;
+      background-color: #333;
       border-radius: 50%;
       width: 18px;
       height: 18px;
-      border: 2px solid black;
+      border: 2px solid #555;
       display: flex;
       align-items: center;
       justify-content: center;
     }
+    
     .custom-marker-inner {
       width: 10px;
       height: 10px;
-      background-color: black;
+      background-color: #888;
       border-radius: 50%;
     }
+    
     .leaflet-popup-content {
       padding: 10px;
       min-width: 150px;
       font-size: 14px;
       max-height: 80vh;
       overflow-y: auto;
+      font-family: 'Aldrich', sans-serif;
+      background-color: #1e1e1e;
+      color: #e0e0e0;
     }
+    
+    .leaflet-popup-content-wrapper {
+      background-color: #1e1e1e;
+      color: #e0e0e0;
+      border: 1px solid #333;
+      box-shadow: 0 0 10px rgba(0,0,0,0.7);
+    }
+    
+    .leaflet-popup-tip {
+      background-color: #1e1e1e;
+    }
+    
     .flag-container {
       text-align: center;
       margin: 0 auto 8px auto;
       width: 100%;
     }
+    
     .flag-img {
       max-width: 200px;
       max-height: 120px;
       width: auto;
       height: auto;
-      border: 1px solid #ddd;
+      border: 1px solid #444;
       display: block;
       margin: 0 auto;
     }
+    
     .no-flag {
-      color: #777;
+      color: #888;
       font-style: italic;
       font-size: 12px;
       text-align: center;
       padding: 5px 0;
     }
+    
     .properties-list {
       margin-top: 8px;
       line-height: 1.4;
     }
+    
     .properties-list b {
       display: inline-block;
       min-width: 80px;
       font-weight: bold;
+      color: #ccc;
     }
+    
     .properties-list div {
       margin-bottom: 3px;
+      color: #aaa;
+    }
+    
+    /* Стили для тёмной карты */
+    .leaflet-control-attribution {
+      background-color: rgba(0,0,0,0.7) !important;
+      color: #aaa !important;
+    }
+    
+    .leaflet-bar {
+      background-color: #1e1e1e !important;
+      border-color: #333 !important;
+    }
+    
+    .leaflet-bar a {
+      background-color: #1e1e1e !important;
+      color: #aaa !important;
+      border-bottom-color: #333 !important;
+    }
+    
+    .leaflet-bar a:hover {
+      background-color: #333 !important;
+      color: #ddd !important;
     }
   </style>
 </head>
@@ -94,14 +163,20 @@
       maxBoundsViscosity: 0.7,
       minZoom: 3,
       maxZoom: 18,
-      worldCopyJump: false
+      worldCopyJump: false,
+      zoomControl: false
     }).setView([30, 0], 3);
 
-    // Добавляем тайлы OpenStreetMap БЕЗ повторения
-    L.tileLayer('https://tile.openstreetmap.bzh/ca/{z}/{x}/{y}.png', {
+    // Добавляем тёмные тайлы в стиле ТНО (CartoDB DarkMatter)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
       noWrap: true,
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      subdomains: 'abc',
+      subdomains: 'abcd',
+    }).addTo(map);
+
+    // Добавляем кастомный zoom control
+    L.control.zoom({
+      position: 'topright'
     }).addTo(map);
 
     // Иконка для маркеров
@@ -116,7 +191,7 @@
     function createPopupContent(feature) {
       if (!feature.properties) return "Нет данных";
       
-      let content = "<div style='max-width:250px'>"; // Ограничиваем максимальную ширину
+      let content = "<div style='max-width:250px'>";
       
       // Обработка флага
       content += "<div class='flag-container'>";
@@ -124,7 +199,7 @@
         content += `<img src="${feature.properties.flag}" class="flag-img" alt="Флаг" 
                  onerror="this.parentNode.innerHTML='<div class=\'no-flag\'>Флаг не загружен</div>'">`;
       } else {
-      
+        
       }
       content += "</div>";
       
@@ -164,8 +239,9 @@
               bubblingMouseEvents: false
             });
             marker.bindPopup(createPopupContent(feature), {
-              maxWidth: 300, // Максимальная ширина popup
-              minWidth: 150   // Минимальная ширина popup
+              maxWidth: 300,
+              minWidth: 150,
+              className: 'dark-popup'
             });
             markersLayer.addLayer(marker);
             return marker;
@@ -174,11 +250,11 @@
             const props = feature.properties || {};
             return {
               stroke: true,
-              color: '#000',
+              color: props['stroke'] || '#555',
               weight: parseInt(props['stroke-width']) || 2,
-              opacity: parseFloat(props['stroke-opacity']) || 1,
+              opacity: parseFloat(props['stroke-opacity']) || 0.8,
               fill: true,
-              fillColor: props['fill'] || '#ff9999',
+              fillColor: props['fill'] || '#333',
               fillOpacity: parseFloat(props['fill-opacity']) || 0.5
             };
           },
@@ -186,7 +262,8 @@
             if (feature.geometry.type !== 'Point') {
               layer.bindPopup(createPopupContent(feature), {
                 maxWidth: 300,
-                minWidth: 150
+                minWidth: 150,
+                className: 'dark-popup'
               });
             }
           }
