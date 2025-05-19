@@ -21,10 +21,39 @@
       overflow: hidden;
     }
     
-    #map { 
-      height: 100vh; 
+    #map-container {
+      position: relative;
+      height: 100vh;
       width: 100vw;
+    }
+    
+    #map { 
+      height: 100%; 
+      width: 100%;
       background-color: #121212;
+    }
+    
+    #noise-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      opacity: 0.57;
+      z-index: 100;
+      background: url('effect.gif') repeat;
+      /* Гарантируем работу GIF */
+      image-rendering: pixelated;
+      /* Анимация для принудительного обновления гифки */
+      animation: noise-animation 0.5s infinite;
+    }
+    
+    /* Анимация для гарантии работы GIF */
+    @keyframes noise-animation {
+      0% { opacity: 0.57; }
+      50% { opacity: 0.58; }
+      100% { opacity: 0.57; }
     }
     
     #error {
@@ -158,6 +187,7 @@
       max-width: 90%;
       box-sizing: border-box;
       transition: all 0.3s ease;
+      z-index: 1001; /* Выше чем эффект помех */
     }
     
     #audio-player.minimized {
@@ -338,7 +368,10 @@
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="noise-overlay"></div>
+  </div>
   <div id="error"></div>
   
   <!-- Аудио плеер -->
@@ -450,7 +483,7 @@
       content += "<div class='flag-container'>";
       if (feature.properties.flag) {
         content += `<img src="${feature.properties.flag}" class="flag-img" alt="Флаг" 
-                 onerror="this.parentNode.innerHTML='<div class=\'no-flag\'>Флаг не загружен</div>'">`;
+                 onerror="this.parentNode.innerHTML='<div class=\\'no-flag\\'>Флаг не загружен</div>'">`;
       }
       content += "</div>";
       
@@ -522,8 +555,8 @@
       })
       .catch(error => {
         console.error("Loading error:", error);
-        document.getElementById('error').innerHTML = `
-          <b>Ошибка загрузки данных</b><br>
+        document.getElementById('error').innerHTML = 
+          `<b>Ошибка загрузки данных</b><br>
           ${error.message}<br><br>
           Проверьте:<br>
           1. Наличие файла map (11).geojson<br>
@@ -835,6 +868,8 @@
     
     // Инициализация информации о треке
     updateTrackInfo();
+
+    
   </script>
 </body>
 </html>
