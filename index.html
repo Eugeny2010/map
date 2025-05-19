@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=Y6jOe2AMgpIwJsp872G6aCN1Mq8Fu1Ms8Kw1dD6Km04lbC-u5qCVCKsxjXuo513DzuP9JbowWTganEPNeO7fCg" charset="UTF-8"></script><style>
+  <style>
     html, body { margin: 0; padding: 0; height: 100%; font-family: Arial, sans-serif; }
-    #map { height: 100vh; width: 100vw; touch-action: none; }
+    #map { height: 100vh; width: 100vw; }
     #error {
       position: absolute;
       top: 10px; left: 10px;
@@ -37,14 +37,42 @@
     .leaflet-popup-content {
       padding: 10px;
       min-width: 150px;
-      font-family: Arial, sans-serif;
-      color: black;
       font-size: 14px;
+      max-height: 80vh;
+      overflow-y: auto;
     }
-    @media (max-width: 600px) {
-      .leaflet-popup-content { font-size: 16px; min-width: 200px; }
-      .custom-marker { width: 22px; height: 22px; }
-      .custom-marker-inner { width: 12px; height: 12px; }
+    .flag-container {
+      text-align: center;
+      margin: 0 auto 8px auto;
+      width: 100%;
+    }
+    .flag-img {
+      max-width: 200px;
+      max-height: 120px;
+      width: auto;
+      height: auto;
+      border: 1px solid #ddd;
+      display: block;
+      margin: 0 auto;
+    }
+    .no-flag {
+      color: #777;
+      font-style: italic;
+      font-size: 12px;
+      text-align: center;
+      padding: 5px 0;
+    }
+    .properties-list {
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+    .properties-list b {
+      display: inline-block;
+      min-width: 80px;
+      font-weight: bold;
+    }
+    .properties-list div {
+      margin-bottom: 3px;
     }
   </style>
 </head>
@@ -53,49 +81,30 @@
   <div id="error"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-
   <script>
-    const southWest = L.latLng(41.0, 27.0);
-    const northEast = L.latLng(70.0, 60.0);
-    const bounds = L.latLngBounds(southWest, northEast);
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const initialZoom = isMobile ? 5 : 7;
+    // Границы карты
+    const worldBounds = L.latLngBounds(
+      L.latLng(-85, -180),
+      L.latLng(85, 180)
+    );
 
+    // Создаем карту с ограничениями
     const map = L.map('map', {
-      maxBounds: bounds,
-      maxBoundsViscosity: 1.0,
-      minZoom: isMobile ? 5 : 7,
-      maxZoom: isMobile ? 11 : 12,
-      preferCanvas: true
-    }).setView([55.0, 40.0], initialZoom);
+      maxBounds: worldBounds,
+      maxBoundsViscosity: 0.7,
+      minZoom: 3,
+      maxZoom: 18,
+      worldCopyJump: false
+    }).setView([30, 0], 3);
 
+    // Добавляем тайлы OpenStreetMap БЕЗ повторения
     L.tileLayer('https://tile.openstreetmap.bzh/ca/{z}/{x}/{y}.png', {
-      attribution: 'Не имеет связи с реальностью. Все события относятся к вселенной игры https://vk.com/vgovernments',
+      noWrap: true,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       subdomains: 'abc',
-      detectRetina: true,
-      crossOrigin: true,
-      updateWhenIdle: false,
-      reuseTiles: true
     }).addTo(map);
 
-    const outerBounds = [[-90, -180], [-90, 180], [90, 180], [90, -180]];
-    L.polygon([
-      outerBounds,
-      [
-        [southWest.lat, southWest.lng],
-        [northEast.lat, southWest.lng],
-        [northEast.lat, northEast.lng],
-        [southWest.lat, northEast.lng]
-      ]
-    ], {
-      fillColor: 'black',
-      fillOpacity: 0.5,
-      stroke: false,
-      className: 'mask',
-      fillRule: 'evenodd'
-    }).addTo(map);
-
+    // Иконка для маркеров
     const whiteMachineIcon = L.divIcon({
       className: 'custom-marker',
       html: '<div class="custom-marker-inner"></div>',
@@ -103,132 +112,93 @@
       iconAnchor: [10, 10]
     });
 
+    // Функция для создания содержимого popup с флагом
     function createPopupContent(feature) {
       if (!feature.properties) return "Нет данных";
-      let content = "<div style='max-height:200px;overflow-y:auto;'>";
-      const isROA = feature.properties['fill'] === '#555555';
-      if (isROA) content += "<b>Контролируется РОА</b><br><hr>";
-      let hasContent = false;
-      for (const key in feature.properties) {
-        if (!['stroke', 'stroke-width', 'stroke-opacity', 'fill', 'fill-opacity'].includes(key)) {
-          content += `<b>${key}</b> ${feature.properties[key] || ''}<br>`;
-          hasContent = true;
-        }
+      
+      let content = "<div style='max-width:250px'>"; // Ограничиваем максимальную ширину
+      
+      // Обработка флага
+      content += "<div class='flag-container'>";
+      if (feature.properties.flag) {
+        content += `<img src="${feature.properties.flag}" class="flag-img" alt="Флаг" 
+                 onerror="this.parentNode.innerHTML='<div class=\'no-flag\'>Флаг не загружен</div>'">`;
+      } else {
+      
       }
-      if (!hasContent && !isROA) return "Нет данных для отображения";
+      content += "</div>";
+      
+      // Добавляем остальные свойства
+      const propsToShow = Object.keys(feature.properties)
+        .filter(k => !['stroke', 'stroke-width', 'stroke-opacity', 'fill', 'fill-opacity', 'flag'].includes(k));
+      
+      if (propsToShow.length > 0) {
+        content += '<div class="properties-list">';
+        propsToShow.forEach(key => {
+          content += `<div><b>${key}</b> ${feature.properties[key] || ''}</div>`;
+        });
+        content += '</div>';
+      }
+      
       content += "</div>";
       return content;
     }
 
-    function processGeoJSON(data) {
-      const roaFeatures = [];
-      const otherFeatures = [];
-      const pointFeatures = []; // Добавлено: отдельный массив для точечных объектов
-
-      data.features.forEach(feature => {
-        if (feature.geometry.type === 'Point') {
-          pointFeatures.push(feature); // Добавлено: сохраняем точечные объекты отдельно
-        } else if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
-          if (feature.properties.fill === '#555555') {
-            roaFeatures.push(feature);
-          } else {
-            otherFeatures.push(feature);
-          }
-        }
-      });
-
-      let roaUnion = null;
-      if (roaFeatures.length > 0) {
-        roaUnion = roaFeatures[0];
-        for (let i = 1; i < roaFeatures.length; i++) {
-          try {
-            roaUnion = turf.union(roaUnion, roaFeatures[i]);
-          } catch (e) {
-            console.warn('Ошибка объединения:', e);
-          }
-        }
-      }
-
-      const processedFeatures = [...roaFeatures, ...pointFeatures]; // Добавлено: включаем точечные объекты
-
-      if (roaUnion) {
-        otherFeatures.forEach(feature => {
-          try {
-            const diff = turf.difference(feature, roaUnion);
-            if (diff && diff.geometry && diff.geometry.coordinates.length > 0) {
-              diff.properties = feature.properties;
-              processedFeatures.push(diff);
-            }
-          } catch (e) {
-            console.warn('Ошибка разности:', e);
-            processedFeatures.push(feature);
-          }
-        });
-      } else {
-        processedFeatures.push(...otherFeatures);
-      }
-
-      return {
-        ...data,
-        features: processedFeatures
-      };
-    }
-
-    fetch('map (9).geojson')
+    // Загрузка и отображение GeoJSON
+    fetch('map (11).geojson')
       .then(response => {
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        return response.json().catch(() => {
-          throw new Error("Invalid JSON format");
-        });
+        return response.json();
       })
       .then(data => {
         if (!data.features) throw new Error("GeoJSON has no features");
-        const processedData = processGeoJSON(data);
         
-        // Создаем отдельный слой для маркеров
+        // Создаем слой для маркеров
         const markersLayer = L.layerGroup().addTo(map);
         
-        L.geoJSON(processedData, {
+        // Добавляем GeoJSON на карту
+        L.geoJSON(data, {
           pointToLayer: (feature, latlng) => {
             const marker = L.marker(latlng, {
               icon: whiteMachineIcon,
               bubblingMouseEvents: false
             });
             marker.bindPopup(createPopupContent(feature), {
-              autoPan: true,
-              autoPanPaddingTopLeft: [15, 15]
+              maxWidth: 300, // Максимальная ширина popup
+              minWidth: 150   // Минимальная ширина popup
             });
-            markersLayer.addLayer(marker); // Добавляем маркер в отдельный слой
+            markersLayer.addLayer(marker);
             return marker;
           },
           style: (feature) => {
             const props = feature.properties || {};
-            const isROA = props['fill'] === '#555555';
             return {
               stroke: true,
               color: '#000',
               weight: parseInt(props['stroke-width']) || 2,
               opacity: parseFloat(props['stroke-opacity']) || 1,
               fill: true,
-              fillColor: isROA ? '#555555' : (props['fill'] || '#ff9999'),
+              fillColor: props['fill'] || '#ff9999',
               fillOpacity: parseFloat(props['fill-opacity']) || 0.5
             };
           },
           onEachFeature: (feature, layer) => {
             if (feature.geometry.type !== 'Point') {
-              layer.bindPopup(createPopupContent(feature));
+              layer.bindPopup(createPopupContent(feature), {
+                maxWidth: 300,
+                minWidth: 150
+              });
             }
           }
         }).addTo(map);
-        map.setMaxBounds(bounds);
       })
       .catch(error => {
         console.error("Loading error:", error);
-        document.getElementById('error').innerHTML =
-          `<b>Ошибка загрузки данных</b><br>
+        document.getElementById('error').innerHTML = `
+          <b>Ошибка загрузки данных</b><br>
           ${error.message}<br><br>
           Проверьте:<br>
-          1. Наличие файла<br>
+          1. Наличие файла map (11).geojson<br>
           2. Формат GeoJSON<br>
           3. Кодировку UTF-8`;
       });
